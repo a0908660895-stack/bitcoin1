@@ -2551,7 +2551,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // doesn't invalidate pointers into the vector, and keep txsdata in scope
     // for as long as `control`.
     std::optional<CCheckQueueControl<CScriptCheck>> control;
-    if (auto& queue = m_chainman.GetCheckQueue(); queue.HasThreads() && fScriptChecks) control.emplace(queue);
+    if (fScriptChecks) control.emplace(m_chainman.GetCheckQueue());
 
     std::vector<PrecomputedTransactionData> txsdata(block.vtx.size());
 
@@ -2613,30 +2613,17 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         if (!tx.IsCoinBase() && fScriptChecks)
         {
             bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
-            TxValidationState tx_state;
-            // If parallel script checking is possible (worker threads are available), they are added to control
-            // which runs the checks asynchronously. Otherwise they are run here directly.
-            std::vector<CScriptCheck> vChecks{};
             ValidationCache& validation_cache{m_chainman.m_validation_cache};
             if (PreCheckInputScripts(tx, view, flags, fCacheResults, txsdata[i], validation_cache)) {
-                // Turn all of this transaction's input scripts into script checks and add them to vChecks
+                // Turn all of this transaction's input scripts into script checks and add them to the queue
+                std::vector<CScriptCheck> vChecks;
                 vChecks.reserve(tx.vin.size());
                 for (unsigned int j = 0; j < tx.vin.size(); j++) {
                     PrecomputedTransactionData& txdata{txsdata[i]};
                     CScriptCheck check(txdata.m_spent_outputs[j], tx, validation_cache.m_signature_cache, j, flags, fCacheResults, &txdata);
                     vChecks.emplace_back(std::move(check));
                 }
-            }
-
-            if (control) control->Add(std::move(vChecks));
-            else {
-                for (auto& check : vChecks) {
-                    if (const auto& check_result = check()) {
-                        state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, strprintf("block-script-verify-flag-failed (%s)", ScriptErrorString(check_result->first)), check_result->second);
-                        break;
-                    }
-                }
-                if (!state.IsValid()) break;
+                control->Add(std::move(vChecks));
             }
         }
 
