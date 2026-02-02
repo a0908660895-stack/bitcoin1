@@ -198,6 +198,23 @@ bool BaseIndex::ProcessBlock(const CBlockIndex* pindex, const CBlock* block_data
     return true;
 }
 
+bool BaseIndex::ProcessBlocks(const CBlockIndex* start, const CBlockIndex* end)
+{
+    // Collect all block indexes from [end...start] in order
+    std::vector<const CBlockIndex*> ordered_blocks;
+    for (const CBlockIndex* block = end; block && start->pprev != block; block = block->pprev) {
+        ordered_blocks.emplace_back(block);
+    }
+
+    // And process blocks in forward order: from start to end
+    for (auto it = ordered_blocks.rbegin(); it != ordered_blocks.rend(); ++it) {
+        if (m_interrupt) return false;
+        if (!ProcessBlock(*it)) return false; // error logged internally
+    }
+
+    return true;
+}
+
 void BaseIndex::Sync()
 {
     const CBlockIndex* pindex = m_best_block_index.load();
@@ -242,8 +259,8 @@ void BaseIndex::Sync()
             }
             pindex = pindex_next;
 
-
-            if (!ProcessBlock(pindex)) return; // error logged internally
+            // For now, process a single block at time
+            if (!ProcessBlocks(/*start=*/pindex, /*end=*/pindex)) return; // error logged internally
 
             auto current_time{NodeClock::now()};
             if (current_time - last_log_time >= SYNC_LOG_INTERVAL) {
