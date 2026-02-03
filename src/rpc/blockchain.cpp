@@ -1589,7 +1589,7 @@ static RPCHelpMan getchaintips()
         obj.pushKV("height", block->nHeight);
         obj.pushKV("hash", block->phashBlock->GetHex());
 
-        Assume(block);
+        CHECK_NONFATAL(block);
         const int branchLen = block->nHeight - active_chain.FindFork(*block)->nHeight;
         obj.pushKV("branchlen", branchLen);
 
@@ -1803,7 +1803,7 @@ static RPCHelpMan getchaintxstats()
         if (!pindex) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
         }
-        Assume(pindex);
+        CHECK_NONFATAL(pindex);
         if (!chainman.ActiveChain().Contains(*pindex)) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Block is not in main chain");
         }
@@ -2742,7 +2742,7 @@ static RPCHelpMan getdescriptoractivity()
             if (!pindex) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
             }
-            Assume(pindex);
+            CHECK_NONFATAL(pindex);
             if (!chainman.ActiveChain().Contains(*pindex)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Block is not in main chain");
             }
@@ -3133,7 +3133,7 @@ static RPCHelpMan dumptxoutset()
         }
 
         const CBlockIndex* invalidate_index{WITH_LOCK(::cs_main, return node.chainman->ActiveChain().Next(*target_index))};
-        Assume(invalidate_index);
+        CHECK_NONFATAL(invalidate_index);
         temporary_rollback.emplace(*node.chainman, *invalidate_index);
     }
 
