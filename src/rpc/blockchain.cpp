@@ -1589,7 +1589,8 @@ static RPCHelpMan getchaintips()
         obj.pushKV("height", block->nHeight);
         obj.pushKV("hash", block->phashBlock->GetHex());
 
-        const int branchLen = block->nHeight - active_chain.FindFork(block)->nHeight;
+        Assume(block);
+        const int branchLen = block->nHeight - active_chain.FindFork(*block)->nHeight;
         obj.pushKV("branchlen", branchLen);
 
         std::string status;

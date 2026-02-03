@@ -162,7 +162,8 @@ static const CBlockIndex* NextSyncBlock(const CBlockIndex* pindex_prev, CChain& 
 
     // Since block is not in the chain, return the next block in the chain AFTER the last common ancestor.
     // Caller will be responsible for rewinding back to the common ancestor.
-    const auto fork = chain.FindFork(pindex_prev);
+    Assume(pindex_prev); // should have been checked above
+    auto fork = chain.FindFork(*pindex_prev);
     if (!fork) return nullptr;
     return chain.Next(*fork);
 }

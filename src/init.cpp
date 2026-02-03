@@ -2283,7 +2283,7 @@ bool StartIndexBackgroundSync(NodeContext& node)
         const CBlockIndex* pindex = chainman.m_blockman.LookupBlockIndex(summary.best_block_hash);
         if (!pindex) break;
         if (!index_chain.Contains(*pindex)) {
-            pindex = index_chain.FindFork(pindex);
+            pindex = index_chain.FindFork(*pindex);
         }
 
         if (!indexes_start_block || !pindex || pindex->nHeight < indexes_start_block.value()->nHeight) {
