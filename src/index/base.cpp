@@ -233,10 +233,13 @@ void BaseIndex::Sync()
                 return;
             }
 
-            const CBlockIndex* pindex_next = WITH_LOCK(cs_main, return NextSyncBlock(pindex, m_chainstate->m_chain));
+            BlockBatch block_batch;
+            block_batch.start_index = WITH_LOCK(cs_main, return NextSyncBlock(pindex, m_chainstate->m_chain));
+            block_batch.end_index = block_batch.start_index;
+
             // If pindex_next is null, it means pindex is the chain tip, so
             // commit data indexed so far.
-            if (!pindex_next) {
+            if (!block_batch.start_index) {
                 SetBestBlockIndex(pindex);
                 // No need to handle errors in Commit. See rationale above.
                 Commit();
@@ -247,20 +250,22 @@ void BaseIndex::Sync()
                 // attached while m_synced is still false, and it would not be
                 // indexed.
                 LOCK(::cs_main);
-                pindex_next = NextSyncBlock(pindex, m_chainstate->m_chain);
-                if (!pindex_next) {
+                block_batch.start_index = NextSyncBlock(pindex, m_chainstate->m_chain);
+                if (!block_batch.start_index) {
                     m_synced = true;
                     break;
                 }
             }
-            if (pindex_next->pprev != pindex && !Rewind(pindex, pindex_next->pprev)) {
+            if (block_batch.start_index->pprev != pindex && !Rewind(pindex, block_batch.start_index->pprev)) {
                 FatalErrorf("Failed to rewind %s to a previous chain tip", GetName());
                 return;
             }
-            pindex = pindex_next;
 
             // For now, process a single block at time
-            if (!ProcessBlocks(/*start=*/pindex, /*end=*/pindex)) return; // error logged internally
+            if (!ProcessBlocks(block_batch.start_index, block_batch.end_index)) return; // error logged internally
+
+            // Update last processed block for next round
+            pindex = block_batch.end_index;
 
             auto current_time{NodeClock::now()};
             if (current_time - last_log_time >= SYNC_LOG_INTERVAL) {
