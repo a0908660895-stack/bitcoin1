@@ -5,6 +5,7 @@
 #include <common/system.h>
 #include <logging.h>
 #include <random.h>
+#include <test/util/common.h>
 #include <util/string.h>
 #include <util/threadpool.h>
 #include <util/time.h>
@@ -73,10 +74,7 @@ std::vector<std::future<void>> BlockWorkers(ThreadPool& threadPool, const std::s
 BOOST_AUTO_TEST_CASE(submit_task_before_start_fails)
 {
     ThreadPool threadPool(POOL_NAME);
-    BOOST_CHECK_EXCEPTION((void)threadPool.Submit([]{ return false; }), std::runtime_error, [&](const std::runtime_error& e) {
-        BOOST_CHECK_EQUAL(e.what(), "No active workers; cannot accept new tasks");
-        return true;
-    });
+    BOOST_CHECK_EXCEPTION((void)threadPool.Submit([]{ return false; }), std::runtime_error, HasReason{"No active workers"});
 }
 
 // Test 1, submit tasks and verify completion
@@ -165,21 +163,17 @@ BOOST_AUTO_TEST_CASE(task_exception_propagates_to_future)
     ThreadPool threadPool(POOL_NAME);
     threadPool.Start(NUM_WORKERS_DEFAULT);
 
-    int num_tasks = 5;
-    std::string err_msg{"something wrong happened"};
+    const auto make_err{[&](size_t n) { return strprintf("error on thread #%s", n); }};
+
+    const int num_tasks = 5;
     std::vector<std::future<void>> futures;
     futures.reserve(num_tasks);
     for (int i = 0; i < num_tasks; i++) {
-        futures.emplace_back(threadPool.Submit([err_msg, i]() {
-            throw std::runtime_error(err_msg + util::ToString(i));
-        }));
+        futures.emplace_back(threadPool.Submit([&make_err, i] { throw std::runtime_error(make_err(i)); }));
     }
 
     for (int i = 0; i < num_tasks; i++) {
-        BOOST_CHECK_EXCEPTION(futures.at(i).get(), std::runtime_error, [&](const std::runtime_error& e) {
-            BOOST_CHECK_EQUAL(e.what(), err_msg + util::ToString(i));
-            return true;
-        });
+        BOOST_CHECK_EXCEPTION(futures[i].get(), std::runtime_error, HasReason{make_err(i)});
     }
 }
 
@@ -296,10 +290,7 @@ BOOST_AUTO_TEST_CASE(interrupt_blocks_new_submissions)
     ThreadPool threadPool(POOL_NAME);
     threadPool.Start(NUM_WORKERS_DEFAULT);
     threadPool.Interrupt();
-    BOOST_CHECK_EXCEPTION((void)threadPool.Submit([]{}), std::runtime_error, [&](const std::runtime_error& e) {
-        BOOST_CHECK_EQUAL(e.what(), "No active workers; cannot accept new tasks");
-        return true;
-    });
+    BOOST_CHECK_EXCEPTION((void)threadPool.Submit([]{ return true; }), std::runtime_error, HasReason{"No active workers; cannot accept new tasks"});
 
     // Reset pool
     threadPool.Stop();
