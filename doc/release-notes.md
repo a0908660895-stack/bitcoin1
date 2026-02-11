@@ -37,6 +37,10 @@ unsupported systems.
 Notable changes
 ===============
 
+### Wallet
+
+- #34222 Backport wallets directory deletion fixes
+
 ### P2P
 
 - #33723 chainparams: remove dnsseed.bitcoin.dashjr-list-of-p2p-nodes.us
@@ -60,7 +64,10 @@ Credits
 
 Thanks to everyone who directly contributed to this release:
 
+- achow101
+- davidgumberg
 - fanquake
+- furszy
 - Hennadii Stepanov
 - m3dwards
 - Padraic Slattery
