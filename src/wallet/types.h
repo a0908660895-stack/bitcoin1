@@ -14,7 +14,7 @@
 #ifndef BITCOIN_WALLET_TYPES_H
 #define BITCOIN_WALLET_TYPES_H
 
-#include <policy/fees/block_policy_estimator.h>
+#include <util/fees.h>
 
 namespace wallet {
 /**
@@ -35,11 +35,11 @@ struct CreatedTransactionResult
 {
     CTransactionRef tx;
     CAmount fee;
-    FeeCalculation fee_calc;
+    FeeSource fee_source;
     std::optional<unsigned int> change_pos;
 
-    CreatedTransactionResult(CTransactionRef _tx, CAmount _fee, std::optional<unsigned int> _change_pos, const FeeCalculation& _fee_calc)
-            : tx(_tx), fee(_fee), fee_calc(_fee_calc), change_pos(_change_pos) {}
+    CreatedTransactionResult(CTransactionRef _tx, CAmount _fee, std::optional<unsigned int> _change_pos, const FeeSource& _fee_source)
+        : tx(_tx), fee(_fee), fee_source(_fee_source), change_pos(_change_pos) {}
 };
 
 } // namespace wallet
