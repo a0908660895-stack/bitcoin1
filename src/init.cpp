@@ -716,6 +716,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     hidden_args.emplace_back("-daemon");
     hidden_args.emplace_back("-daemonwait");
 #endif
+    argsman.AddArg("-waitfordebugger", "Spin until a debugger is attached", ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
 
     // Add the hidden options
     argsman.AddHiddenArgs(hidden_args);
@@ -1136,6 +1137,12 @@ bool AppInitParameterInteraction(const ArgsManager& args)
             return InitError(util::ErrorString(mempool_result));
         }
     }
+
+#ifndef ENABLE_WAIT_FOR_DEBUGGER
+    if (args.GetBoolArg("-waitfordebugger", false)) {
+        return InitError(Untranslated("-waitfordebugger is unavailable in this build. Rebuild with -DENABLE_WAIT_FOR_DEBUGGER=ON."));
+    }
+#endif
 
     return true;
 }
