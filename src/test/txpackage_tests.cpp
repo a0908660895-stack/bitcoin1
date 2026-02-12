@@ -17,7 +17,8 @@
 #include <util/strencodings.h>
 #include <test/util/txmempool.h>
 #include <validation.h>
-
+#include <script/sign.h>
+#include <script/signingprovider.h>
 #include <boost/test/unit_test.hpp>
 
 using namespace util::hex_literals;
@@ -1234,5 +1235,68 @@ BOOST_AUTO_TEST_CASE(package_rbf_tests)
         BOOST_CHECK(m_node.mempool->GetIter(tx_parent_1->GetHash()).has_value());
         BOOST_CHECK(m_node.mempool->GetIter(tx_child_1->GetHash()).has_value());
     }
+}
+BOOST_AUTO_TEST_CASE(package_rbf_deduplication_tests)
+{
+    // Mine blocks to mature coinbases.
+    mineBlocks(5);
+    MockMempoolMinFee(CFeeRate(5000), *m_node.mempool);
+    LOCK(::cs_main);
+
+    // 1. Setup Parent
+    CKey parent_key = GenerateRandomKey();
+    CScript parent_spk = GetScriptForDestination(WitnessV0KeyHash(parent_key.GetPubKey()));
+    auto mtx_parent = CreateValidMempoolTransaction(m_coinbase_txns[0], 0, 0, coinbaseKey,
+                                                    parent_spk, CAmount(49 * COIN), true);
+    CTransactionRef tx_parent = MakeTransactionRef(mtx_parent);
+
+    // 2. Setup Conflict
+    CKey conflict_key = GenerateRandomKey();
+    CScript conflict_spk = GetScriptForDestination(WitnessV0KeyHash(conflict_key.GetPubKey()));
+    auto mtx_conflict = CreateValidMempoolTransaction(m_coinbase_txns[1], 0, 0, coinbaseKey,
+                                                      conflict_spk, CAmount(49 * COIN), true);
+    CTransactionRef tx_conflict = MakeTransactionRef(mtx_conflict);
+
+    // 3. Create Child (Conflicts with tx_conflict and spends Parent)
+    CKey child_key = GenerateRandomKey();
+    CScript child_spk = GetScriptForDestination(WitnessV0KeyHash(child_key.GetPubKey()));
+
+    CMutableTransaction mtx_child;
+    mtx_child.vin.resize(2);
+    mtx_child.vin[0].prevout = COutPoint(tx_parent->GetHash(), 0);
+    mtx_child.vin[1].prevout = COutPoint(m_coinbase_txns[1]->GetHash(), 0);
+    mtx_child.vout.resize(1);
+    mtx_child.vout[0].scriptPubKey = child_spk;
+    mtx_child.vout[0].nValue = CAmount(48 * COIN);
+
+    std::vector<CTxOut> prevouts = {mtx_parent.vout[0], m_coinbase_txns[1]->vout[0]};
+    // Create a keystore and add the keys we need
+    FillableSigningProvider keystore;
+    keystore.AddKey(parent_key);
+    keystore.AddKey(coinbaseKey);
+
+    for (int i = 0; i < 2; ++i) {
+        SignatureData sigdata;
+        // Fix 1: Use 'keystore' instead of '*m_node.chainman'
+        // Fix 2: Remove '&' from mtx_child (as applied before)
+        ProduceSignature(keystore,
+                 MutableTransactionSignatureCreator(mtx_child, i, prevouts[i].nValue,
+                                    SIGHASH_ALL),
+                 prevouts[i].scriptPubKey, sigdata);
+        UpdateInput(mtx_child.vin[i], sigdata);
+    }
+    CTransactionRef tx_child = MakeTransactionRef(mtx_child);
+
+    // 4. Submit Package
+    Package package_rbf_dedup{tx_parent, tx_child};
+    const auto result = ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool,
+                                          package_rbf_dedup, false, {});
+
+    // 5. Validations
+    auto it_parent = result.m_tx_results.find(tx_parent->GetWitnessHash());
+    auto it_child = result.m_tx_results.find(tx_child->GetWitnessHash());
+    BOOST_CHECK(it_parent->second.m_result_type == MempoolAcceptResult::ResultType::MEMPOOL_ENTRY);
+    BOOST_CHECK(it_child->second.m_result_type == MempoolAcceptResult::ResultType::VALID);
+    BOOST_CHECK(!m_node.mempool->exists(tx_conflict->GetHash()));
 }
 BOOST_AUTO_TEST_SUITE_END()
